@@ -206,11 +206,11 @@ class RestController extends Controller
         }
         catch (\yii\web\UnauthorizedHttpException $e)
         {
-            Yii::error([
+            Yii::warning([
                 'message' => $e->getMessage(),
                 'Authorization' => Yii::$app->request->headers->get('Authorization'),
                 'Headers' => Yii::$app->request->headers->toArray(),
-            ]);
+            ], 'auth');
 
             throw $e;
         }

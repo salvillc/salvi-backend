@@ -139,7 +139,6 @@ class SpecificationForm extends Model
             $this->addError('date_end', 'Дата завершення повинна бути більша дати старту');
         }
         if (!$this->all_location && empty($this->locations_id)) {
-            \Yii::error($this->locations_id);
             $this->addError('locations_id', 'Необхідно вибрати хоча б 1 локацію');
         }
     }

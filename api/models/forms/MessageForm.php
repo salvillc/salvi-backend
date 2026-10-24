@@ -72,7 +72,6 @@ class MessageForm extends Model
     private function getUser()
     {
         if (Yii::$app->user->isGuest) {
-            Yii::error('guest');
             if (empty($this->user_id)) {
                 $model = new ChatGuestUser([
                     'name' => $this->name,

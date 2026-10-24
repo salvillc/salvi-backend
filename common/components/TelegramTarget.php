@@ -22,11 +22,9 @@ class TelegramTarget extends Target
     /** @var int Таймаут запроса к Telegram API в секундах */
     public $timeOut = 2;
 
-    /** @var array Исключения, которые не нужно слать в Telegram (например, 404 ошибки) */
+    /** @var array Исключения, которые не нужно слать в Telegram (все клиентские ошибки 4xx) */
     public $except = [
-        'yii\web\HttpException:404',
-        'yii\web\HttpException:403',
-        'yii\web\HttpException:401',
+        'yii\web\HttpException:4*',
     ];
 
     public function init()
@@ -67,6 +65,11 @@ class TelegramTarget extends Target
 
             // Не отправлять в Telegram пустые ошибки (например, случайный вызов Yii::error([]))
             if (empty($message[0]) && !is_numeric($message[0])) {
+                continue;
+            }
+
+            // Дополнительная страховка: пропуск 4xx HTTP-исключений, если объект исключения передан напрямую
+            if ($message[0] instanceof \yii\web\HttpException && $message[0]->statusCode < 500) {
                 continue;
             }
 
