@@ -21,10 +21,6 @@ class SearchController extends Controller
     public $elasticLog = null;
 
 //Еластик стоит локально на серваке
-//ip - 116.203.191.217
-//log - root
-//pass - 4L6pd-C@R5+V5p#i
-//port - 2321
     public function actionUpdateTable($arg = '')
     {
         echo date('d-m-Y H:i:s') . PHP_EOL;
