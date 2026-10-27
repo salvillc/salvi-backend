@@ -169,7 +169,6 @@ class OrderController extends RestController
      */
     public function actionSetStatusOnApprove()
     {
-
         Yii::info($_SERVER, 'status');
         Yii::info($this->post, 'status');
         
@@ -182,60 +181,45 @@ class OrderController extends RestController
             ->andWhere(['order.company_id' => $user->company_id])
             ->andWhere(['in', 'order.status', [Order::STATUS_OPEN, Order::STATUS_MOD_APPROVE]])
             ->one();
-        if ( $order->created_by_user == $user->id && !empty($id)) {
-            if ($order != false)
+        if ($order && $order->created_by_user == $user->id && !empty($id)) {
+            $comment = ArrayHelper::getValue($this->post, 'comment', null);
+
+            if(!is_null($comment))
             {
+                $order->comment = $comment;
+                $order->save();
+            }
 
-	            $comment = ArrayHelper::getValue($this->post, 'comment', null);
+            try {
+                $result = $order->changeStatusToOnApprove();
+            } catch (NotEnoughBudgetException $e) {
+                return $this->failResponse(['message' => $e->getMessage(), 'show_modal' => false]);
+            } catch (PONumberRequiredException $e) {
+                return $this->failResponse(['message' => $e->getMessage(), 'show_modal' => false]);
+            } catch (MissingProductException $e) {
+                return $this->failResponse(['message' => $e->getMessage(), 'show_modal' => false]);
+            } catch (NotEnoughQuantityProductException $e) {
+                return $this->failResponse(['message' => $e->getMessage(), 'show_modal' => false]);
+            } catch (BudgetNotAvailableException $e) {
+                return $this->failResponse([self::MESSAGE => $e->getMessage(), 'show_modal' => true]);
+            } catch (\Throwable $e) {
+                Yii::error('changeStatusToOnApprove error: ' . $e->getMessage(), 'order');
+                return $this->failResponse(['message' => $e->getMessage(), 'show_modal' => false]);
+            }
+            if ($result) {
+                $order->setDeliveryDate(ArrayHelper::getValue($this->post, 'delivery_date', null));
 
-	            if(!is_null($comment))
-	            {
-		            $order->comment = $comment;
-
-		            $order->save();
-	            }
-
-	            try {
-                    $result = $order->changeStatusToOnApprove();
-                } catch (NotEnoughBudgetException $e) {
-                    return $this->failResponse(['message' => $e->getMessage(), 'show_modal' => false]);
-                } catch (PONumberRequiredException $e) {
-                    return $this->failResponse(['message' => $e->getMessage(), 'show_modal' => false]);
-                } catch (MissingProductException $e) {
-                    return $this->failResponse(['message' => $e->getMessage(), 'show_modal' => false]);
-                } catch (NotEnoughQuantityProductException $e) {
-                    return $this->failResponse(['message' => $e->getMessage(), 'show_modal' => false]);
-                } catch (BudgetNotAvailableException $e) {
-                    return $this->failResponse([self::MESSAGE => $e->getMessage(), 'show_modal' => true]);
-                }
-                if ($result) {
-                    $order->setDeliveryDate(ArrayHelper::getValue($this->post, 'delivery_date', null));
-
-//                    return $this->successResponse([
-//                        'order_id' => $order->id,
-//                        'text' => ArrayHelper::getValue($this->post, 'comment', null),
-//                        'user_id' => $user->id
-//                    ]);
-
-//                    $model = new CommentForm();
-//                    if ($model->load([
-//                            'order_id' => $order->id,
-//                            'text' => ArrayHelper::getValue($this->post, 'comment', null),
-//                            'user_id' => $user->id
-//                        ], '') && $model->validate() &&
-//                        $model->create()) {
-////                        $this->sendEmailAddComment($order->id, ArrayHelper::getValue($this->post, 'comment', null));
-//                    }
-
-
+                try {
                     NotificationHelper::onApproveOrderManager($order);
-                    return $this->successResponse();
-                } else {
-                    return $this->failResponse();
+                } catch (\Throwable $e) {
+                    Yii::error('NotificationHelper::onApproveOrderManager error: ' . $e->getMessage(), 'order');
                 }
+                return $this->successResponse();
+            } else {
+                return $this->failResponse(['message' => 'Не вдалося перевести замовлення на погодження']);
             }
         }
-       // return $this->accessDenied();
+        return $this->failResponse(['message' => 'Замовлення не знайдено або доступ заборонено']);
     }
 
     public function actionRepeatFromStart()
@@ -1127,19 +1111,15 @@ class OrderController extends RestController
 
     private function sendEmail($to, $subject, $message)
     {
-	    Yii::$app->mailer->compose() // Можно передать имя шаблона, если используется
-	    ->setFrom(Yii::$app->params['senderEmail']) // Кому
-	    ->setTo($to) // Кому
-	    ->setSubject($subject) // Тема
-	    ->setHtmlBody($message) // HTML-версия письма
-	    ->send();
-    	
-//        $headers = 'From: no-reply@salvigroup.com.ua'       . "\r\n" .
-//            'Reply-To: no-reply@salvigroup.com.ua' . "\r\n" .
-//            'Content-type: text/html; charset=utf-8' . "\r\n" .
-//            'X-Mailer: PHP/' . phpversion();
-//
-//        mail($to, $subject, $message, $headers);
+        try {
+            Yii::$app->queue->push(new \api\job\SendEmail([
+                'to' => $to,
+                'subject' => $subject,
+                'htmlBody' => $message,
+            ]));
+        } catch (\Throwable $e) {
+            Yii::error('Failed to push sendEmail to queue: ' . $e->getMessage(), 'mailer');
+        }
         return true;
     }
 }

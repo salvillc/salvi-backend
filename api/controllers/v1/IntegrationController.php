@@ -1156,20 +1156,15 @@ class IntegrationController extends RestController
     }
 
 	private function sendEmail($to, $subject, $message) {
-		
-		Yii::$app->mailer->compose() // Можно передать имя шаблона, если используется
-		->setFrom(Yii::$app->params['senderEmail']) // Кому
-		->setTo($to) // Кому
-		->setSubject($subject) // Тема
-		->setHtmlBody($message) // HTML-версия письма
-		->send();
-  
-//		$headers = 'From: no-reply@salvigroup.com.ua'       . "\r\n" .
-//			'Reply-To: no-reply@salvigroup.com.ua' . "\r\n" .
-//			'Content-type: text/html; charset=utf-8' . "\r\n" .
-//			'X-Mailer: PHP/' . phpversion();
-//
-//		mail($to, $subject, $message, $headers);
+		try {
+			\Yii::$app->queue->push(new \api\job\SendEmail([
+				'to' => $to,
+				'subject' => $subject,
+				'htmlBody' => $message,
+			]));
+		} catch (\Throwable $e) {
+			\Yii::error('Failed to push IntegrationController sendEmail to queue: ' . $e->getMessage(), 'mailer');
+		}
 		return true;
 	}
 

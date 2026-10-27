@@ -19,18 +19,16 @@ class Order {
         return self::sendEmail($view, $order->getCreatedBy()->one()->email, $subject);
     }
 
-    private function sendEmail(string $body, string $receiver, string $subject) {
-    	
-        $mail = Yii::$app
-            ->mailer
-            ->compose()
-            ->setFrom(Yii::$app->params['emailAccount'])
-            ->setTo($receiver)
-            ->setSubject($subject)
-            ->setHtmlBody($body);
-
-        $log = $mail->toString();
-
-        return $mail->send();
+    private static function sendEmail(string $body, string $receiver, string $subject) {
+        try {
+            return Yii::$app->queue->push(new \api\job\SendEmail([
+                'to' => $receiver,
+                'subject' => $subject,
+                'htmlBody' => $body,
+            ]));
+        } catch (\Throwable $e) {
+            Yii::error('Failed to push repeatToStartOrder email to queue: ' . $e->getMessage(), 'mailer');
+            return false;
+        }
     }
 }

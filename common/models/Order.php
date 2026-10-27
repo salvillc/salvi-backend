@@ -685,7 +685,7 @@ class Order extends ActiveRecord
 		
 		$managerUser = User::find()->where(['email' => $to])->one();
 		
-		if($managerUser->is_sending_mail == 0)
+		if($managerUser && $managerUser->is_sending_mail == 0)
 		{
 			return true;
 		}
@@ -754,16 +754,15 @@ class Order extends ActiveRecord
 		$message .= "<br><a href='https://salvi.ua/orders/?order={$order->id}'>Перейти к заказу</a>";
 		$message .= "<br><a href='https://salvi.ua/orders/?order={$order->id}'>Перейти к заказу</a>";
 		
-		
-		Yii::$app->mailer->compose()
-		->setFrom(Yii::$app->params['senderEmail'])
-		->setTo($to)
-		->setSubject($subject)
-		->setHtmlBody($message)
-		->send();
-		
-		
-//		mail($to, $subject, $message, $headers);
+		try {
+			Yii::$app->queue->push(new \api\job\SendEmail([
+				'to' => $to,
+				'subject' => $subject,
+				'htmlBody' => $message,
+			]));
+		} catch (\Throwable $e) {
+			Yii::error('Failed to push sendEmals to queue: ' . $e->getMessage(), 'mailer');
+		}
 		
 		return true;
 	}

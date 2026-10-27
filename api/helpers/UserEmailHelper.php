@@ -47,33 +47,37 @@ class UserEmailHelper
 
     public static function sendMsg(string $view, array $data, string $subject, $file = false, bool $oneTime = true)
     {
-        $mail = Yii::$app
-            ->mailer
-            ->compose(
-                ['html' => $view],
-                $data
-            )
-            ->setFrom([Yii::$app->params['emailAccount'] => Yii::$app->params['emailSenderName']])
-            ->setTo(ArrayHelper::getValue($data, 'user.email'))
-            ->setSubject($subject);
+        try {
+            $mail = Yii::$app
+                ->mailer
+                ->compose(
+                    ['html' => $view],
+                    $data
+                )
+                ->setFrom([Yii::$app->params['emailAccount'] => Yii::$app->params['emailSenderName']])
+                ->setTo(ArrayHelper::getValue($data, 'user.email'))
+                ->setSubject($subject);
 	
-	    if($file)
-	    {
-		    $mail->attachContent($file, [
-			    'fileName' => "mail_file_".date('d_m_Y_H_i_s').".txt",
-			    'contentType' => 'text/plain'
-		    ]);
-	    }
+            if($file)
+            {
+                $mail->attachContent($file, [
+                    'fileName' => "mail_file_".date('d_m_Y_H_i_s').".txt",
+                    'contentType' => 'text/plain'
+                ]);
+            }
 	    
-        $log = $mail->toString();
-        $response = $mail->send();
-        $model = new EmailLog([
-            'result' => $response,
-            'email' => ArrayHelper::getValue($data, 'user.email'),
-            'body' => quoted_printable_decode($log)
-        ]);
-//        Yii::error(quoted_printable_decode($log));
-        return $model->save();
+            $log = $mail->toString();
+            $response = $mail->send();
+            $model = new EmailLog([
+                'result' => $response,
+                'email' => ArrayHelper::getValue($data, 'user.email'),
+                'body' => quoted_printable_decode($log)
+            ]);
+            return $model->save();
+        } catch (\Throwable $e) {
+            Yii::error('Mailer send error: ' . $e->getMessage(), 'mailer');
+            return false;
+        }
     }
 
     /** Подтверждение заявки на регистрацию
