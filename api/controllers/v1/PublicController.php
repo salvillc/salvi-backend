@@ -104,51 +104,79 @@ class PublicController extends \api\controllers\PublicController
         $checks = [
             'database' => false,
             'redis' => false,
+            'queue' => false,
         ];
 
         // 1. Проверка доступности MySQL
-        try
-        {
+        try {
             Yii::$app->db->createCommand('SELECT 1')->execute();
             $checks['database'] = true;
-        }
-        catch (\Throwable $e)
-        {
+        } catch (\Throwable $e) {
             Yii::error('Healthcheck DB Error: ' . $e->getMessage(), 'health');
         }
 
         // 2. Проверка доступности Redis
-        try
-        {
-            if (Yii::$app->has('redis') && Yii::$app->redis)
-            {
+        try {
+            if (Yii::$app->has('redis') && Yii::$app->redis) {
                 Yii::$app->redis->ping();
                 $checks['redis'] = true;
             } else {
                 $checks['redis'] = true;
             }
-        } catch (\Throwable $e)
-        {
+        } catch (\Throwable $e) {
             Yii::error('Healthcheck Redis Error: ' . $e->getMessage(), 'health');
         }
 
-        $isHealthy = $checks['database'] && $checks['redis'];
+        // 3. Проверка статуса очередей задач Yii Queue
+        $queueInfo = null;
+        try {
+            if (Yii::$app->has('queue')) {
+                $queue = Yii::$app->queue;
+                if ($queue instanceof \yii\queue\redis\Queue) {
+                    $prefix = $queue->channel;
+                    $redis = $queue->redis;
 
-        if (!$isHealthy)
-        {
-            Yii::$app->response->statusCode = 503;
-            return $this->failResponse([
-                'status' => 'degraded',
-                'timestamp' => time(),
-                'checks' => $checks,
-            ]);
+                    $waiting = (int)$redis->llen("$prefix.waiting");
+                    $delayed = (int)$redis->zcount("$prefix.delayed", '-inf', '+inf');
+                    $reserved = (int)$redis->zcount("$prefix.reserved", '-inf', '+inf');
+                    $total = (int)$redis->get("$prefix.message_id");
+
+                    $queueInfo = [
+                        'channel' => $prefix,
+                        'waiting' => $waiting,
+                        'delayed' => $delayed,
+                        'reserved' => $reserved,
+                        'total' => $total,
+                        'done' => max(0, $total - $waiting - $delayed - $reserved),
+                    ];
+                    $checks['queue'] = true;
+                } else {
+                    $checks['queue'] = true;
+                }
+            }
+        } catch (\Throwable $e) {
+            Yii::error('Healthcheck Queue Error: ' . $e->getMessage(), 'health');
+            $checks['queue'] = false;
         }
 
-        return $this->successResponse([
-            'status' => 'ok',
+        $isHealthy = $checks['database'] && $checks['redis'] && $checks['queue'];
+
+        $responseData = [
+            'status' => $isHealthy ? 'ok' : 'degraded',
             'timestamp' => time(),
             'checks' => $checks,
-        ]);
+        ];
+
+        if ($queueInfo !== null) {
+            $responseData['queue'] = $queueInfo;
+        }
+
+        if (!$isHealthy) {
+            Yii::$app->response->statusCode = 503;
+            return $this->failResponse($responseData);
+        }
+
+        return $this->successResponse($responseData);
     }
 
     public function actionCheckDeploy()
