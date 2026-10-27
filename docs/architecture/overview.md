@@ -69,8 +69,10 @@ flowchart TD
         SFTP["Удаленный SFTP 1C (94.130.177.104)"]
         SMTP["MiroHost SMTP (mx1.mirohost.net)"]
         TG["Telegram Bot API (api.telegram.org)"]
+        HT["HetrixTools (Мониторинг из 3 стран)"]
     end
 
+    HT -.->|"Uptime/Ping сайта и API"| NginxAPI
     Client -->|"HTTPS REST"| NginxAPI --> YiiAPI
     Client -->|"WSS / WS :7070"| NginxWS --> NodeServer
 
@@ -102,10 +104,17 @@ flowchart TD
 
 ---
 
-## 5. Централизованный алертинг ошибок (TelegramTarget)
+## 5. Мониторинг надежности и алертинг ошибок
 
-Для непрерывного мониторинга надежности backend-сервисов в конфигурациях `api/config/main.php` и `console/config/main.php` зарегистрирован кастомный лог-таргет:
-* **Класс:** [`common\components\TelegramTarget`](file:///C:/Users/Admin/PhpstormProjects/salvi_back/common/components/TelegramTarget.php)
-* **Функция:** перехват сообщений уровня `error` (`Logger::LEVEL_ERROR`) и немедленная отправка форматированного алерта в рабочий Telegram-чат команды разработки.
-* **Изоляция сбоев:** отправка работает через cURL с ограничением таймаута (2с) и изолирована блоком `try/catch`, гарантируя, что проблемы на стороне Telegram API не повлияют на жизненный цикл клиентских запросов.
-* **Подробности механизма:** см. [10. Документация алертинга ошибок в Telegram](../flows/10-error-handling-and-telegram-alerts.md).
+Система мониторинга Salvi включает внешний и внутренний контуры контроля:
+
+1. **Внешний мониторинг доступности ([HetrixTools](https://hetrixtools.com/dashboard/account/settings/)):**
+   * Выполняет непрерывную независимую проверку доступности SPA-фронтенда (`salvi.ua`) и REST API (`api.salvi.ua`) из **3 стран**.
+   * Контролирует HTTP 200 OK, время отклика и статус SSL-сертификатов, моментально оповещая команду при падении или деградации сервиса.
+
+2. **Внутренний алертинг уровня приложения ([TelegramTarget](file:///C:/Users/Admin/PhpstormProjects/salvi_back/common/components/TelegramTarget.php)):**
+   * Для перехвата критических ошибок backend-сервисов в конфигурациях `api/config/main.php` и `console/config/main.php` зарегистрирован кастомный лог-таргет:
+     * **Класс:** [`common\components\TelegramTarget`](file:///C:/Users/Admin/PhpstormProjects/salvi_back/common/components/TelegramTarget.php)
+     * **Функция:** перехват сообщений уровня `error` (`Logger::LEVEL_ERROR`) и немедленная отправка форматированного алерта в рабочий Telegram-чат команды разработки.
+     * **Изоляция сбоев:** отправка работает через cURL с ограничением таймаута (2с) и изолирована блоком `try/catch`, гарантируя, что проблемы на стороне Telegram API не повлияют на жизненный цикл клиентских запросов.
+     * **Подробности механизма:** см. [10. Документация алертинга ошибок в Telegram](../flows/10-error-handling-and-telegram-alerts.md).

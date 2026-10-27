@@ -93,6 +93,64 @@ class PublicController extends \api\controllers\PublicController
         }
     }
     
+    /**
+     * Эндпоинт проверки доступности (Health Check) для HetrixTools и систем мониторинга
+     * GET /v1/public/health
+     *
+     * @return array
+     */
+    public function actionHealth()
+    {
+        $checks = [
+            'database' => false,
+            'redis' => false,
+        ];
+
+        // 1. Проверка доступности MySQL
+        try
+        {
+            Yii::$app->db->createCommand('SELECT 1')->execute();
+            $checks['database'] = true;
+        }
+        catch (\Throwable $e)
+        {
+            Yii::error('Healthcheck DB Error: ' . $e->getMessage(), 'health');
+        }
+
+        // 2. Проверка доступности Redis
+        try
+        {
+            if (Yii::$app->has('redis') && Yii::$app->redis)
+            {
+                Yii::$app->redis->ping();
+                $checks['redis'] = true;
+            } else {
+                $checks['redis'] = true;
+            }
+        } catch (\Throwable $e)
+        {
+            Yii::error('Healthcheck Redis Error: ' . $e->getMessage(), 'health');
+        }
+
+        $isHealthy = $checks['database'] && $checks['redis'];
+
+        if (!$isHealthy)
+        {
+            Yii::$app->response->statusCode = 503;
+            return $this->failResponse([
+                'status' => 'degraded',
+                'timestamp' => time(),
+                'checks' => $checks,
+            ]);
+        }
+
+        return $this->successResponse([
+            'status' => 'ok',
+            'timestamp' => time(),
+            'checks' => $checks,
+        ]);
+    }
+
     public function actionCheckDeploy()
     {
 
@@ -111,7 +169,7 @@ class PublicController extends \api\controllers\PublicController
 
 //    public function actionTmpChangeApiKeys()
 //    {
-//        $userlist = User::find()->all();
+//        $userlist = User::find()->all();1
 //
 //        foreach ($userlist as $user)
 //        {

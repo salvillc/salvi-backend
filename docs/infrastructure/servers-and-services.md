@@ -18,7 +18,8 @@
 | **Почтовый транспорт** | Postfix + MiroHost SMTP | `587` (TLS) | Отправка почты (`mx1.mirohost.net:587`, SwiftMailer) |
 | **SFTP-шлюз (1С / Каталог)** | OpenSSH SFTP | `22321` | Удаленный сервер `94.130.177.104` для обмена прайс-листами 1С |
 | **CI/CD Деплой** | GitHub Actions (`ubuntu-latest`) | SSH `:2321` | Изолированный пользователь `deployer`, скрипт-страж `deploy-guard.sh`, bash-скрипты `deploy.sh` (self-hosted runner выведен из эксплуатации) |
-| **Мониторинг** | Zabbix Agent 2 | `10050` | Мониторинг производительности и доступности сервера |
+| **Внешний мониторинг доступности** | HetrixTools Uptime Monitor | SaaS (`hetrixtools.com`) | Внешний мониторинг доступности сайта и REST API из 3 стран (HTTP/HTTPS пинг, аптайм, время отклика, SSL) |
+| **Инфраструктурный мониторинг** | Zabbix Agent 2 | `10050` | Мониторинг производительности и метрик ОС сервера (CPU, RAM, диски, сервисы) |
 | **Алертинг ошибок в TG** | Telegram Bot API | HTTPS (`api.telegram.org`) | Мгновенный алертинг о критических сбоях API и CLI (`common\components\TelegramTarget`) |
 
 ---
@@ -213,11 +214,23 @@ bash /var/www/salvi/www/deploy.sh
 
 ---
 
-## 7. Мониторинг и алертинг ошибок (Telegram Alerts & Zabbix)
+## 7. Мониторинг и алертинг ошибок (HetrixTools, Zabbix & Telegram Alerts)
 
-Инфраструктура мониторинга разделена на два контура:
-1. **Инфраструктурный мониторинг (Zabbix Agent 2):** отслеживает загрузку CPU/RAM, свободное место на дисках, состояние демонов systemd (`php-fpm`, `nginx`, `mysqld`, `redis`, `yii-queue@1`) и сетевую доступность портов.
-2. **Алертинг уровня приложения (Telegram Bot API):**
+Инфраструктура мониторинга разделена на три взаимодополняющих контура:
+
+1. **Внешний мониторинг доступности (Uptime Monitor via HetrixTools):**
+   * **Сервис:** [HetrixTools Dashboard](https://hetrixtools.com/dashboard/account/settings/).
+   * **Объекты контроля:** непрерывный внешний мониторинг доступности публичного сайта (`salvi.ua` / SPA Frontend) и программного интерфейса (`api.salvi.ua` / REST API).
+   * **Эндпоинт Health Check API:** `GET /v1/public/health` ([`PublicController::actionHealth()`](file:///C:/Users/Admin/PhpstormProjects/salvi_back/api/controllers/v1/PublicController.php#L102-L145)). Эндпоинт автоматически проверяет доступность MySQL (`SELECT 1`) и соединение с Redis (`PING`). При сбое инфраструктуры возвращается `503 Service Unavailable`, что переводит монитор HetrixTools в статус DOWN.
+   * **География проверок:** распределенный мониторинг из **3 стран**, что исключает ложные тревоги при локальных сбоях у отдельных магистральных провайдеров (алерт генерируется только при подтверждении недоступности независимыми узлами).
+   * **Контролируемые параметры:** HTTP/HTTPS коды ответов (200 OK), задержка отклика (RTT/latency), валидность SSL-сертификатов Cloudflare/Nginx, детекция даунтайма.
+   * **Оповещения:** мгновенная отправка нотификаций ответственным специалистам при падении или деградации отклика сервисов.
+
+2. **Инфраструктурный мониторинг сервера (HetrixTools Server Agent & Zabbix Agent 2):**
+   * **Метрики:** непрерывный сбор системных показателей ОС: свободное место на дисках (`/`, пороги 20% и 10%), утилизация CPU (Load Average), оперативная память (RAM) и состояние служб.
+   * Выполняется независимыми системными демонами (не нагружая PHP-FPM и не завися от доступности веб-сервера).
+
+3. **Алертинг уровня приложения (Telegram Bot API):**
    * **Компонент:** [`common\components\TelegramTarget`](file:///C:/Users/Admin/PhpstormProjects/salvi_back/common/components/TelegramTarget.php).
    * **Каналы перехвата:** зарегистрирован в `api/config/main.php` (для REST API) и `console/config/main.php` (для фоновых задач и очередей).
    * **Условия срабатывания:** уровень `error` (`Logger::LEVEL_ERROR = 1`). Ожидаемые HTTP-ошибки (`401`, `403`, `404`) отфильтрованы через массив `$except`.

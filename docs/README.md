@@ -11,8 +11,9 @@
 * Версии ПО: Nginx, PHP-FPM, MySQL, Redis, Node.js, Postfix
 * Systemd сервисы, воркеры очередей, демоны Forever
 * Конфигурация Nginx виртуальных хостов и маршрутизация доменов
-* CI/CD процесс (GitHub Actions Self-Hosted Runner)
+* CI/CD процесс (GitHub Actions Runner, `deploy-guard.sh`, `deploy.sh`)
 * Расписание Crontab
+* Трехуровневый мониторинг: внешний мониторинг доступности сайта и API из 3 стран ([HetrixTools](https://hetrixtools.com/dashboard/account/settings/)), метрики сервера (Zabbix) и алертинг приложения ([TelegramTarget](flows/10-error-handling-and-telegram-alerts.md))
 
 ### 2. [Архитектура приложения и точки входа](architecture/overview.md)
 * Архитектура Yii2 Advanced (`api`, `console`, `common`, `nodejs`)
