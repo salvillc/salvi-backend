@@ -66,14 +66,17 @@ class History extends \yii\db\ActiveRecord
     /**
      * @param int $entity
      * @param int $entityId
+     * @param User|null $user
      * @return bool
      * @throws \Throwable
      */
-    public static function saveHistory(int $entity, int $entityId)
+    public static function saveHistory(int $entity, int $entityId, $user = null)
     {
         try {
             /** @var  $user User */
-            $user = Yii::$app->user->getIdentity();
+            if ($user === null && Yii::$app->has('user') && !Yii::$app->user->isGuest) {
+                $user = Yii::$app->user->getIdentity();
+            }
             $role = '';
             if ($user) {
                 $roles = Yii::$app->authManager->getRolesByUser($user->id);
@@ -100,7 +103,7 @@ class History extends \yii\db\ActiveRecord
                 $model->role = $role;
             }
             return $model->save();
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Yii::error($e);
             return false;
         }

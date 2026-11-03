@@ -577,20 +577,21 @@ class LandingController extends RestController
             </div>
         </div>';
 
-//        $mailer = Yii::$app->mailer->compose()
-//            ->setFrom(Yii::$app->params['senderEmail'] ?? 'no-reply@salvigroup.com.ua')
-//            ->setTo($managerEmail)
-//            ->setSubject($subject)
-//            ->setHtmlBody($htmlBody);
-//
-//        // Прикрепляем логотип к письму, если он существует на диске
-//        if ($logoPathOnDisk && file_exists($logoPathOnDisk)) {
-//            $mailer->attach($logoPathOnDisk, [
-//                'fileName' => 'client_logo_' . basename($logoPathOnDisk),
-//            ]);
-//        }
 
-       // $mailer->send();
+        $mailer = Yii::$app->mailer->compose()
+            ->setFrom(Yii::$app->params['senderEmail'] ?? 'no-reply@salvigroup.com.ua')
+            ->setTo($managerEmail)
+            ->setSubject($subject)
+            ->setHtmlBody($htmlBody);
+
+        // Прикрепляем логотип к письму, если он существует на диске
+        if ($logoPathOnDisk && file_exists($logoPathOnDisk)) {
+            $mailer->attach($logoPathOnDisk, [
+                'fileName' => 'client_logo_' . basename($logoPathOnDisk),
+            ]);
+        }
+
+       $mailer->send();
     }
 
     /**
