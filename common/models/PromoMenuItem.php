@@ -13,6 +13,7 @@ use yii\db\ActiveRecord;
  * @property int|null $landing_page_id
  * @property string $title
  * @property string $url
+ * @property string|null $icon
  * @property int $level 2 = 2-й рівень (розділ / заголовок колонки), 3 = 3-й рівень (пункт у розділі)
  * @property int $parent_id
  * @property string|null $parent_uuid
@@ -59,7 +60,7 @@ class PromoMenuItem extends ActiveRecord
             [['highlight'], 'default', 'value' => 0],
             [['target_blank'], 'default', 'value' => 1],
             [['active'], 'default', 'value' => 1],
-            [['title', 'parent_uuid'], 'string', 'max' => 255],
+            [['title', 'parent_uuid', 'icon'], 'string', 'max' => 255],
             [['url'], 'string', 'max' => 500],
             [['title', 'url'], 'trim'],
         ];
@@ -104,6 +105,30 @@ class PromoMenuItem extends ActiveRecord
     }
 
     /**
+     * Получить абсолютный URL иконки
+     * @return string|null
+     */
+    public function getIconUrl()
+    {
+        if (empty($this->icon)) {
+            return null;
+        }
+
+        if (strpos($this->icon, 'http://') === 0 || strpos($this->icon, 'https://') === 0) {
+            return $this->icon;
+        }
+
+        try {
+            if (Yii::$app->has('urlManager')) {
+                return Yii::$app->urlManager->createAbsoluteUrl(['/landings/menu_icons/' . $this->icon]);
+            }
+        } catch (\Throwable $e) {}
+
+        $base = Yii::$app->params['backUrl'] ?? 'https://sapi.salvi.ua';
+        return rtrim($base, '/') . '/landings/menu_icons/' . ltrim($this->icon, '/');
+    }
+
+    /**
      * Форматирование для админ-панели
      * @return array
      */
@@ -127,6 +152,8 @@ class PromoMenuItem extends ActiveRecord
             'landing_page_id' => $this->landing_page_id,
             'title' => $this->title,
             'url' => $this->url,
+            'icon' => $this->icon,
+            'icon_url' => $this->getIconUrl(),
             'level' => (int)$this->level,
             'parent_id' => (int)$this->parent_id,
             'parent_uuid' => $this->parent_uuid,
@@ -286,6 +313,7 @@ class PromoMenuItem extends ActiveRecord
             'highlight' => (bool)$item->highlight,
             'is_custom' => true,
             'sort' => (int)$item->sort,
+            'img_path' => $item->getIconUrl(),
         ];
     }
 }

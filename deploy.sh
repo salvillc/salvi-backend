@@ -68,6 +68,7 @@ TAR_EXCLUDES=(
     --exclude='*.log'
     --exclude='api/web/files'
     --exclude='api/web/landings/logos'
+    --exclude='api/web/landings/menu_icons'
     --exclude='api/web/product'
     --exclude='common/uploads'
 )
@@ -132,6 +133,7 @@ mkdir -p "$PROJECT_DIR/api/runtime" \
          "$PROJECT_DIR/console/runtime" \
          "$PROJECT_DIR/common/uploads/landings" \
          "$PROJECT_DIR/api/web/landings/logos" \
+         "$PROJECT_DIR/api/web/landings/menu_icons" \
          "$PROJECT_DIR/api/web/files" 2>/dev/null || true
 chown -R salvi:salvi "$PROJECT_DIR/api/runtime" "$PROJECT_DIR/console/runtime" "$PROJECT_DIR/common/uploads" "$PROJECT_DIR/api/web/landings" 2>/dev/null || true
 chmod -R 775 "$PROJECT_DIR/api/runtime" "$PROJECT_DIR/console/runtime" "$PROJECT_DIR/common/uploads" "$PROJECT_DIR/api/web/landings" 2>/dev/null || true

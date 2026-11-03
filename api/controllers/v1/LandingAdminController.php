@@ -324,13 +324,22 @@ class LandingAdminController extends RestController
         }
 
         // Получаем категории 1-го уровня (родители для 2-го уровня)
-        $level1 = Category::find()
+        $level1Raw = Category::find()
             ->select(['id', 'uuid', 'name', 'sort'])
             ->where(['delete' => 0])
             ->andWhere(['or', ['parent_id' => 0], ['parent_id' => null]])
             ->orderBy(['sort' => SORT_ASC, 'name' => SORT_ASC])
             ->asArray()
             ->all();
+
+        $level1 = array_map(function ($l1) {
+            return [
+                'id' => (int)$l1['id'],
+                'uuid' => $l1['uuid'],
+                'name' => $l1['name'],
+                'sort' => (int)($l1['sort'] ?? 0),
+            ];
+        }, $level1Raw);
 
         // Получаем категории 2-го уровня (родители для 3-го уровня)
         $level1Ids = array_column($level1, 'id');
@@ -402,6 +411,9 @@ class LandingAdminController extends RestController
         $model->target_blank = isset($body['target_blank']) ? (!empty($body['target_blank']) ? 1 : 0) : 1;
         $model->active = isset($body['active']) ? (!empty($body['active']) ? 1 : 0) : 1;
         $model->landing_page_id = !empty($body['landing_page_id']) ? (int)$body['landing_page_id'] : null;
+        if (array_key_exists('icon', $body)) {
+            $model->icon = !empty($body['icon']) ? trim($body['icon']) : null;
+        }
 
         // Автоматически определяем parent_uuid по выбранной категории
         if ($model->parent_id) {
@@ -435,6 +447,48 @@ class LandingAdminController extends RestController
      * Удаление промо-пункта меню
      * @return array
      */
+    /**
+     * Загрузка іконки для промо-пункту меню
+     * @return array
+     */
+    public function actionUploadMenuIcon()
+    {
+        $file = UploadedFile::getInstanceByName('icon') ?: UploadedFile::getInstanceByName('file');
+        if (!$file) {
+            return $this->failResponse(['message' => 'Файл не передано']);
+        }
+
+        $ext = strtolower($file->extension);
+        $allowedExtensions = ['png', 'jpg', 'jpeg', 'webp', 'svg'];
+        if (!in_array($ext, $allowedExtensions, true)) {
+            return $this->failResponse(['message' => 'Дозволені формати: PNG, JPG, WEBP, SVG']);
+        }
+
+        if ($file->size > 5 * 1024 * 1024) {
+            return $this->failResponse(['message' => 'Розмір іконки не повинен перевищувати 5 МБ']);
+        }
+
+        $uploadDir = Yii::getAlias('@api/web/landings/menu_icons');
+        if (!is_dir($uploadDir)) {
+            FileHelper::createDirectory($uploadDir, 0777);
+        }
+
+        $fileName = 'icon_' . date('Ymd_His') . '_' . substr(uniqid(), -6) . '.' . $ext;
+        $targetPath = $uploadDir . DIRECTORY_SEPARATOR . $fileName;
+
+        if (!$file->saveAs($targetPath)) {
+            return $this->failResponse(['message' => 'Не вдалося зберегти іконку на сервері']);
+        }
+
+        $url = Yii::$app->urlManager->createAbsoluteUrl(['/landings/menu_icons/' . $fileName]);
+
+        return $this->successResponse([
+            'message' => 'Іконку успішно завантажено',
+            'file_name' => $fileName,
+            'url' => $url,
+        ]);
+    }
+
     public function actionDeleteMenuItem()
     {
         $id = Yii::$app->request->post('id') ?? Yii::$app->request->getBodyParam('id');

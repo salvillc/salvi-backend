@@ -19,6 +19,7 @@ use common\models\Unit;
 use common\models\ElasticSearchHistoryProsses;
 use api\helpers\AppRequestHelper;
 use api\models\forms\ElasticSearchHistoryProssesForm;
+use common\models\PromoMenuItem;
 use Yii;
 use yii\db\Expression;
 
@@ -1484,6 +1485,9 @@ class SearchController extends RestController
 
         $this->categoriesTree = new CategoryTree(true,0,$args['location_id'],0,false,true);
 
+        // Внедряем пользовательские промо-ссылки в дерево категорий
+        PromoMenuItem::injectIntoTree($this->categoriesTree->tree);
+
         Category::findCategory(
             $this->categoriesTree->tree,
             $currentCategoryCode,
@@ -1501,25 +1505,43 @@ class SearchController extends RestController
 
         if ( !empty($categoryListNext))
         {
+            $standardCategoryIds = [];
+            foreach ($categoryListNext as $cat) {
+                if (empty($cat['is_custom']) && !empty($cat['id']) && is_numeric($cat['id'])) {
+                    $standardCategoryIds[] = (int)$cat['id'];
+                }
+            }
 
-            $query = $this->buildProductQuery(
-                $specifications,
-                $args,
-                array_column($categoryListNext, 'id')
-            );
+            if (!empty($standardCategoryIds)) {
+                $query = $this->buildProductQuery(
+                    $specifications,
+                    $args,
+                    $standardCategoryIds
+                );
 
-            //$result['total'] = (clone $query)->count();
+                $this->applyOrdering($query, $args);
 
-            $this->applyOrdering($query, $args);
+                $this->applyPagination($query, $args);
 
-            $this->applyPagination($query, $args);
-
-            $query = $this->applyWithProducts($query, $specifications);
+                $query = $this->applyWithProducts($query, $specifications);
+            } else {
+                $query = null;
+            }
 
             $newCategoryList = [];
 
             foreach ($categoryListNext as $category)
             {
+                if (!empty($category['is_custom'])) {
+                    $category['products'] = [];
+                    $newCategoryList[] = $category;
+                    continue;
+                }
+
+                if (!$query) {
+                    continue;
+                }
+
                 $categoryQuery = clone $query;
 
                 $productsQuery = $categoryQuery
