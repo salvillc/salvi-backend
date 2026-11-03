@@ -58,16 +58,21 @@ class Elastic
             throw new \Exception('Не удалось подключится к еластику, подключение - ' . $elasticHost);
         }
 
+        if (!class_exists('Elasticsearch\ClientBuilder')) {
+            \Yii::error('Elasticsearch\ClientBuilder не знайдено. Пакет elasticsearch/elasticsearch відсутній у vendor.', 'elasticsearch');
+            return;
+        }
+
         try
         {
             $this->elastic = ClientBuilder::create()->setHosts(array($elasticHost))
                 ->setBasicAuthentication(self::LOGIN, self::PASSWORD)
                 ->build();
         }
-        catch (\Exception $exception)
+        catch (\Throwable $exception)
         {
-//            Log::error($exception);
-            return false;
+            \Yii::error('Помилка ініціалізації Elasticsearch: ' . $exception->getMessage(), 'elasticsearch');
+            return;
         }
     }
 
