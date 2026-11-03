@@ -68,6 +68,7 @@ TAR_EXCLUDES=(
     --exclude='*.log'
     --exclude='api/web/files'
     --exclude='api/web/landings/logos'
+    --exclude='api/web/product'
     --exclude='common/uploads'
 )
 
