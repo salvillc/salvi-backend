@@ -12,6 +12,7 @@ use api\controllers\RestController;
 use api\helpers\CategoryTree;
 use common\models\Category;
 use common\models\Config;
+use common\models\PromoMenuItem;
 use yii\helpers\ArrayHelper;
 
 /**
@@ -29,6 +30,9 @@ class CategoriesController extends RestController
         $order_id = ArrayHelper::getValue($this->post, 'order_id', 0);
         $add_product = ArrayHelper::getValue($this->post, 'add_product', 0);
         $categories = new CategoryTree(true, 0, $location_id, $order_id, $add_product);
+
+        // Внедряем пользовательские промо-ссылки в дерево меню каталога
+        PromoMenuItem::injectIntoTree($categories->tree);
 
         return $this->successResponse(['category' => $categories]);
     }

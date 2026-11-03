@@ -69,6 +69,10 @@ $config = [
             'enablePrettyUrl' => true,
             'showScriptName' => false,
             'rules' => [
+                'promo/submit-order' => 'v1/landing/submit-order',
+                ['pattern' => 'promo/<slug:[\w-]+>/test', 'route' => 'v1/landing/view', 'verb' => 'GET'],
+                ['pattern' => 'promo/<slug:[\w-]+>', 'route' => 'v1/landing/view', 'verb' => 'GET'],
+                ['pattern' => 'promo', 'route' => 'v1/landing/view', 'verb' => 'GET', 'defaults' => ['slug' => 'novorichni-nabory']],
             ],
         ],
         'recaptchaV3' => [
