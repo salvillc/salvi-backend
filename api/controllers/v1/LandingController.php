@@ -103,7 +103,7 @@ class LandingController extends RestController
     }
 
     /**
-     * Приём заявки с формы промо-страницы и отправка email менеджеру
+     * Приём заявки с формы промо-страницы и отправка email менеджеру и клиенту
      * @return array
      */
     public function actionSubmitOrder()
@@ -197,21 +197,46 @@ class LandingController extends RestController
 
         $order->save(false);
 
-        // 2. Отправка письма менеджеру
+        // 2. Отправка писем менеджеру и клиенту
         $managerEmail = ($page && !empty($page->manager_email))
             ? $page->manager_email
             : (Yii::$app->params['senderEmail'] ?? 'info@salvigroup.com.ua');
 
+        $managerSent = false;
+        $clientSent = false;
+        $errors = [];
+
+        // 2.1 Отправка письма менеджеру
         try {
             $this->sendEmailToManager($order, $managerEmail);
-            $order->email_status = LandingOrder::STATUS_SENT;
-            $order->save(false);
+            $managerSent = true;
         } catch (Throwable $e) {
-            Yii::error('Помилка відправки email заявки ' . $order->order_number . ': ' . $e->getMessage(), 'landing');
-            $order->email_status = LandingOrder::STATUS_FAILED;
-            $order->email_error = $e->getMessage();
-            $order->save(false);
+            $errMsg = 'Помилка відправки менеджеру: ' . $e->getMessage();
+            Yii::error($errMsg, 'landing');
+            $errors[] = $errMsg;
         }
+
+        // 2.2 Отправка письма клиенту (если email указан в заявке)
+        $clientEmail = trim($order->email ?? '');
+        if (!empty($clientEmail) && filter_var($clientEmail, FILTER_VALIDATE_EMAIL)) {
+            try {
+                $this->sendEmailToClient($order, $clientEmail, $managerEmail);
+                $clientSent = true;
+            } catch (Throwable $e) {
+                $errMsg = 'Помилка відправки клієнту (' . $clientEmail . '): ' . $e->getMessage();
+                Yii::error($errMsg, 'landing');
+                $errors[] = $errMsg;
+            }
+        }
+
+        if (empty($errors)) {
+            $order->email_status = LandingOrder::STATUS_SENT;
+            $order->email_error = null;
+        } else {
+            $order->email_status = ($managerSent || $clientSent) ? LandingOrder::STATUS_SENT : LandingOrder::STATUS_FAILED;
+            $order->email_error = implode("; \n", $errors);
+        }
+        $order->save(false);
 
         return $this->successResponse([
             'message' => 'Заявка успішно прийнята',
@@ -571,10 +596,8 @@ class LandingController extends RestController
                     <tr><td style="padding:6px 0;color:#666;">Логотип:</td><td style="padding:6px 0;">' . $logoHtml . '</td></tr>
                 </table>
             </div>
-            
-            <div style="background:#f4f5f7;padding:14px 24px;text-align:center;font-size:12px;color:#888;">
-                Повідомлення створено автоматично системою SALVI з промо-сторінки новорічних наборів.
-            </div>
+         
+           
         </div>';
 
 
@@ -584,6 +607,10 @@ class LandingController extends RestController
             ->setSubject($subject)
             ->setHtmlBody($htmlBody);
 
+        if (!empty($order->email) && filter_var($order->email, FILTER_VALIDATE_EMAIL)) {
+            $mailer->setReplyTo($order->email);
+        }
+
         // Прикрепляем логотип к письму, если он существует на диске
         if ($logoPathOnDisk && file_exists($logoPathOnDisk)) {
             $mailer->attach($logoPathOnDisk, [
@@ -592,6 +619,98 @@ class LandingController extends RestController
         }
 
        $mailer->send();
+    }
+
+    /**
+     * Формирование и отправка HTML письма клиенту (подтверждение заявки)
+     * @param LandingOrder $order
+     * @param string $clientEmail
+     * @param string|null $managerEmail
+     * @throws Throwable
+     */
+    protected function sendEmailToClient(LandingOrder $order, $clientEmail, $managerEmail = null)
+    {
+        $subject = "Ваша заявка №{$order->order_number}: Новорічні набори SALVI";
+
+        $logoHtml = '<i>Без логотипу</i>';
+        $logoPathOnDisk = null;
+
+        if ($order->logo_file) {
+            $logoUrl = $order->getLogoUrl();
+            $logoPathOnDisk = Yii::getAlias('@api/web/landings/logos/' . $order->logo_file);
+            $logoHtml = "Місце: <b>" . htmlspecialchars($order->logo_placement ?: 'на упаковці') . "</b>";
+            if ($logoUrl) {
+                $logoHtml .= "<br><a href='{$logoUrl}' target='_blank' style='color:#269447;font-weight:bold;'>Переглянути завантажений логотип &rarr;</a>";
+            }
+        }
+
+        $htmlBody = '
+        <div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e0e0e0;border-radius:10px;overflow:hidden;color:#222;">
+            <div style="background:#2E2F32;padding:20px 24px;color:#fff;">
+                <h2 style="margin:0;font-size:22px;color:#269447;">Ваша заявка на новорічні набори прийнята!</h2>
+                <div style="margin-top:6px;font-size:14px;color:#bbb;">№ заявки: <b>' . htmlspecialchars($order->order_number) . '</b> | Дата: ' . date('d.m.Y H:i') . '</div>
+            </div>
+            
+            <div style="padding:24px;">
+                <div style="background:#f0fdf4;border-left:4px solid #269447;padding:14px 16px;margin-bottom:24px;border-radius:4px;font-size:14px;line-height:1.5;color:#1e3a24;">
+                    <b>Дякуємо за ваше звернення!</b><br>
+                    Ми успішно отримали вашу заявку. Наш менеджер зв\'яжеться з вами найближчим часом для уточнення деталей та узгодження замовлення.
+                </div>
+
+                <h3 style="margin-top:0;color:#2E2F32;border-bottom:2px solid #269447;padding-bottom:6px;font-size:16px;">1. Ваші контактні дані</h3>
+                <table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:14px;">
+                    <tr><td style="padding:6px 0;color:#666;width:160px;">Контактна особа:</td><td style="padding:6px 0;font-weight:bold;">' . htmlspecialchars($order->name) . '</td></tr>
+                    <tr><td style="padding:6px 0;color:#666;">Компанія:</td><td style="padding:6px 0;font-weight:bold;">' . htmlspecialchars($order->company ?: '—') . '</td></tr>
+                    <tr><td style="padding:6px 0;color:#666;">Телефон:</td><td style="padding:6px 0;font-weight:bold;"><a href="tel:' . htmlspecialchars($order->phone) . '" style="color:#269447;">' . htmlspecialchars($order->phone) . '</a></td></tr>
+                    <tr><td style="padding:6px 0;color:#666;">Email:</td><td style="padding:6px 0;">' . htmlspecialchars($order->email ?: '—') . '</td></tr>
+                    <tr><td style="padding:6px 0;color:#666;">Зручний канал:</td><td style="padding:6px 0;"><b>' . htmlspecialchars($order->channel) . '</b></td></tr>
+                    ' . ($order->comment ? '<tr><td style="padding:6px 0;color:#666;">Коментар:</td><td style="padding:6px 0;background:#f9f9f9;padding:8px;border-radius:4px;">' . nl2br(htmlspecialchars($order->comment)) . '</td></tr>' : '') . '
+                </table>
+
+                <h3 style="color:#2E2F32;border-bottom:2px solid #269447;padding-bottom:6px;font-size:16px;">2. Параметри замовлення</h3>
+                <table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:14px;">
+                    <tr><td style="padding:6px 0;color:#666;width:160px;">Бюджет на набір:</td><td style="padding:6px 0;font-weight:bold;">' . htmlspecialchars($order->budget) . '</td></tr>
+                    <tr><td style="padding:6px 0;color:#666;">Кількість наборів:</td><td style="padding:6px 0;font-weight:bold;">' . (int)$order->qty . ' шт.</td></tr>
+                    <tr><td style="padding:6px 0;color:#666;">Орієнтовна сума:</td><td style="padding:6px 0;font-size:18px;font-weight:bold;color:#269447;">' . number_format((float)$order->total_estimate, 0, '', ' ') . ' грн</td></tr>
+                    <tr><td style="padding:6px 0;color:#666;">Бажаний термін:</td><td style="padding:6px 0;font-weight:bold;">' . htmlspecialchars($order->deadline) . '</td></tr>
+                    <tr><td style="padding:6px 0;color:#666;">Побажання по наповненню:</td><td style="padding:6px 0;">' . htmlspecialchars($order->interests ?: 'Підбере менеджер') . '</td></tr>
+                    ' . ($order->wishes ? '<tr><td style="padding:6px 0;color:#666;">Додаткові побажання:</td><td style="padding:6px 0;">' . nl2br(htmlspecialchars($order->wishes)) . '</td></tr>' : '') . '
+                </table>
+
+                <h3 style="color:#2E2F32;border-bottom:2px solid #269447;padding-bottom:6px;font-size:16px;">3. Оформлення та брендування</h3>
+                <table style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:14px;">
+                    <tr><td style="padding:6px 0;color:#666;width:160px;">Упаковка:</td><td style="padding:6px 0;">' . htmlspecialchars($order->packaging) . '</td></tr>
+                    <tr><td style="padding:6px 0;color:#666;">Наповнювач:</td><td style="padding:6px 0;">' . htmlspecialchars($order->filler) . '</td></tr>
+                    <tr><td style="padding:6px 0;color:#666;">Стрічка:</td><td style="padding:6px 0;">' . htmlspecialchars($order->ribbon) . '</td></tr>
+                    <tr><td style="padding:6px 0;color:#666;">Декор:</td><td style="padding:6px 0;">' . htmlspecialchars($order->decor ?: '—') . '</td></tr>
+                    <tr><td style="padding:6px 0;color:#666;">Логотип:</td><td style="padding:6px 0;">' . $logoHtml . '</td></tr>
+                </table>
+            </div>
+            
+            <div style="background:#f4f5f7;padding:16px 24px;text-align:center;font-size:13px;color:#777;line-height:1.5;">
+                Дякуємо, що обрали <b>SALVI</b>!<br>
+                Якщо у вас виникли запитання, зв\'яжіться з нами: <a href="mailto:info@salvigroup.com.ua" style="color:#269447;text-decoration:none;">info@salvigroup.com.ua</a> або завітайте на <a href="https://salvi.ua" target="_blank" style="color:#269447;text-decoration:none;">salvi.ua</a>
+            </div>
+        </div>';
+
+        $mailer = Yii::$app->mailer->compose()
+            ->setFrom(Yii::$app->params['senderEmail'] ?? 'no-reply@salvigroup.com.ua')
+            ->setTo($clientEmail)
+            ->setSubject($subject)
+            ->setHtmlBody($htmlBody);
+
+        if (!empty($managerEmail)) {
+            $mailer->setReplyTo($managerEmail);
+        }
+
+        // Прикрепляем логотип к письму, если он существует на диске
+        if ($logoPathOnDisk && file_exists($logoPathOnDisk)) {
+            $mailer->attach($logoPathOnDisk, [
+                'fileName' => 'client_logo_' . basename($logoPathOnDisk),
+            ]);
+        }
+
+        $mailer->send();
     }
 
     /**
