@@ -752,7 +752,7 @@ class OrderController extends RestController
                 ->where(['order.id' => $id])
                 ->andWhere(['order.company_id' => $user->company_id])
                 ->one();
-            if ($order->changeStatusOnAtManager()) {
+            if ($order && $order->changeStatusOnAtManager()) {
                 return $this->successResponse();
             }
             return $this->failResponse();

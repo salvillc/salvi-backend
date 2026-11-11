@@ -668,37 +668,46 @@ class Order extends ActiveRecord
 	{
 		$company = $order->getCompany()->one();
 		
-		if (!isset($company->manager_email) || empty($company->manager_email))
+		if (!$company || empty($company->manager_email))
 		{
 			return false;
 		}
 		
-		$emails = explode(',', $company->manager_email);
+		$emails = array_map('trim', explode(',', $company->manager_email));
+		$recipients = [];
 		
-		// remove spaces(trim function)
-		foreach ($emails as &$email)
+		foreach ($emails as $email)
 		{
-			$email = trim($email);
+			if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL))
+			{
+				continue;
+			}
+			
+			$managerUser = User::find()->where(['email' => $email])->one();
+			
+			if ($managerUser && $managerUser->is_sending_mail == 0)
+			{
+				continue;
+			}
+			
+			$recipients[] = $email;
 		}
 		
-		$to = $company->manager_email;
-		
-		$managerUser = User::find()->where(['email' => $to])->one();
-		
-		if($managerUser->is_sending_mail == 0)
+		if (empty($recipients))
 		{
 			return true;
 		}
 		
-		$subject = '=?utf-8?B?' . base64_encode("Клиент({$company->short_name}) оформил заказ №{$order->id}") . '?=';
-//		$headers = 'From: no-reply@salvigroup.com.ua' . "\r\n" . 'Reply-To: no-reply@salvigroup.com.ua' . "\r\n" . 'Content-type: text/html; charset=utf-8' . "\r\n" . 'X-Mailer: PHP/' . phpversion();
+		$to = count($recipients) === 1 ? reset($recipients) : $recipients;
+		$companyName = $company->short_name ?? '';
+		$subject = '=?utf-8?B?' . base64_encode("Клиент({$companyName}) оформил заказ №{$order->id}") . '?=';
 		
 		$createdBy = $order->getCreatedBy()->one();
+		$creatorName = $createdBy ? trim("{$createdBy->first_name} {$createdBy->last_name}") : '';
 		
-		//        $products = [];
 		$products = $order->getProduct()->all();
 		
-		$message = "Клиент {$createdBy->first_name} {$createdBy->last_name}({$company->short_name}) оформил заказ №{$order->id}";
+		$message = "Клиент {$creatorName}({$companyName}) оформил заказ №{$order->id}";
 		
 		$messageProduct = "";
 		
@@ -720,13 +729,14 @@ class Order extends ActiveRecord
 			foreach ($products as $key => $product)
 			{
 				$index = ++$key;
+				$productModel = $product->getProduct()->one();
 				
-				if (!is_null($product->getProduct()->one()))
+				if (!is_null($productModel))
 				{
 					$messageProduct .= "<tr style='border: 1px solid black;text-align: center;'>";
 					$messageProduct .= "<td style='border: 1px solid black;'>{$index}</td>";
-					$messageProduct .= "<td style='border: 1px solid black;'>{$product->getProduct()->one()->sku}</td>";
-					$messageProduct .= "<td style='border: 1px solid black;'>{$product->getProduct()->one()->name}</td>";
+					$messageProduct .= "<td style='border: 1px solid black;'>{$productModel->sku}</td>";
+					$messageProduct .= "<td style='border: 1px solid black;'>{$productModel->name}</td>";
 					$messageProduct .= "<td style='border: 1px solid black;'>{$product->quantity}</td>";
 					$messageProduct .= "<td style='border: 1px solid black;'>{$product->price}</td>";
 					$messageProduct .= "<td style='border: 1px solid black;'>{$product->total_sum}</td>";
@@ -752,18 +762,21 @@ class Order extends ActiveRecord
 		
 		$message .= "\r\nДля подтвержения заказа перейдите по ссылке и нажмите кнопку \"Передати постачальнику\"\r\n";
 		$message .= "<br><a href='https://salvi.ua/orders/?order={$order->id}'>Перейти к заказу</a>";
-		$message .= "<br><a href='https://salvi.ua/orders/?order={$order->id}'>Перейти к заказу</a>";
 		
-		
-		Yii::$app->mailer->compose()
-		->setFrom(Yii::$app->params['senderEmail'])
-		->setTo($to)
-		->setSubject($subject)
-		->setHtmlBody($message)
-		->send();
-		
-		
-//		mail($to, $subject, $message, $headers);
+		try
+		{
+			Yii::$app->mailer->compose()
+				->setFrom(Yii::$app->params['senderEmail'])
+				->setTo($to)
+				->setSubject($subject)
+				->setHtmlBody($message)
+				->send();
+		}
+		catch (\Throwable $e)
+		{
+			Yii::error("Failed to send order #{$order->id} email to manager: " . $e->getMessage(), __METHOD__);
+			return false;
+		}
 		
 		return true;
 	}
