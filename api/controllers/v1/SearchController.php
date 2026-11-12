@@ -2001,7 +2001,10 @@ class SearchController extends RestController
 
             if(!$withoutCache)
             {
-                unlink($file);
+                if(file_exists($file))
+                {
+                    unlink($file);
+                }
             }
         }
 
