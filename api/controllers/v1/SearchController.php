@@ -1472,11 +1472,11 @@ class SearchController extends RestController
 
         $categoryListNext = [];
 
-        $pagination = $AppRequestHelper->getFromPost('pagination');
+        $pagination = $AppRequestHelper->getFromPost('pagination') ?? [];
 
         $args = [
-            'page' => $pagination['page'],
-            'perPage' => $pagination['rowsPerPage'],
+            'page' => $pagination['page'] ?? 0,
+            'perPage' => $pagination['rowsPerPage'] ?? 20,
             'order' => ($pagination['sort'] ?? 'ASC'),
             'orderBy' => ($pagination['orderBy'] ?? 'sort'),
             'specification_only' => $AppRequestHelper->getFromPost('specification_only'),
@@ -1488,13 +1488,32 @@ class SearchController extends RestController
         // Внедряем пользовательские промо-ссылки в дерево категорий
         PromoMenuItem::injectIntoTree($this->categoriesTree->tree);
 
-        Category::findCategory(
-            $this->categoriesTree->tree,
-            $currentCategoryCode,
-            $breadCrumbs,
-            $currentCategory,
-            $categoryListNext
-        );
+        if (!empty($currentCategoryCode) && is_string($currentCategoryCode)) {
+            Category::findCategory(
+                $this->categoriesTree->tree,
+                $currentCategoryCode,
+                $breadCrumbs,
+                $currentCategory,
+                $categoryListNext
+            );
+        }
+
+        if (empty($currentCategory)) {
+            return $this->failResponse([
+                'message' => 'Категорію не знайдено',
+                'breadCrumbs' => $breadCrumbs,
+                'categoryListNext' => [],
+                'products' => [],
+                'filters' => [],
+                'total' => 0,
+                'catalogOptions' => [
+                    'specification_only' => [
+                        'available' => false,
+                        'enabled' => false,
+                    ],
+                ],
+            ]);
+        }
 
         $specifications = Specification::getListByParams($args['location_id'],$this->user->company_id);
 
@@ -1693,11 +1712,11 @@ class SearchController extends RestController
 
         $AppRequestHelper = new AppRequestHelper();
 
-        $pagination = $AppRequestHelper->getFromPost('pagination');
+        $pagination = $AppRequestHelper->getFromPost('pagination') ?? [];
 
         $args = [
-            'page' => $pagination['page'],
-            'perPage' => $pagination['rowsPerPage'],
+            'page' => $pagination['page'] ?? 0,
+            'perPage' => $pagination['rowsPerPage'] ?? 20,
             'order' => ($pagination['sort'] ?? 'ASC'),
             'orderBy' => ($pagination['orderBy'] ?? 'sort'),
             'specification_only' => $AppRequestHelper->getFromPost('specification_only'),
@@ -1714,7 +1733,13 @@ class SearchController extends RestController
 
         $specifications = Specification::getListByParams($args['location_id'],$this->user->company_id);
 
-        $category = Category::find()->where(['code' => $args['categoryCode']])->one();
+        $category = !empty($args['categoryCode']) && is_string($args['categoryCode'])
+            ? Category::find()->where(['code' => $args['categoryCode']])->one()
+            : null;
+
+        if (!$category) {
+            return $this->failResponse(['message' => 'Категорію не знайдено', 'products' => []]);
+        }
 
         $query = $this->buildProductQuery(
             $specifications,

@@ -129,8 +129,12 @@ class Category extends ActiveRecord
     }
 
 
-    public static function findCategory (array $categories, string $code, array &$breadCrumbs, ?array &$currentCategory, array &$categoryListNext): bool
+    public static function findCategory (array $categories, ?string $code, array &$breadCrumbs, ?array &$currentCategory, array &$categoryListNext): bool
     {
+        if (empty($code)) {
+            return false;
+        }
+
         foreach ($categories as $category)
         {
             $breadCrumbs[] = [
