@@ -2013,24 +2013,28 @@ class SearchController extends RestController
 
         $withoutCache = false;
 
-        if(file_exists($file))
-        {
-            $fp = fopen($file, 'r');
+        try {
+            if (file_exists($file)) {
+                $fp = @fopen($file, 'r');
 
-            $timeTreeImportStart = fread($fp, filesize($file));
+                $timeTreeImportStart = ($fp && @filesize($file) > 0) ? fread($fp, filesize($file)) : 0;
 
-            if(time() - $timeTreeImportStart < 300)
-            {
-                $withoutCache = true;
-            }
+                if ($fp) {
+                    fclose($fp);
+                }
 
-            if(!$withoutCache)
-            {
-                if(file_exists($file))
-                {
-                    unlink($file);
+                if (time() - $timeTreeImportStart < 300) {
+                    $withoutCache = true;
+                }
+
+                if (!$withoutCache) {
+                    if (file_exists($file)) {
+                        @unlink($file);
+                    }
                 }
             }
+        } catch (\Throwable $e) {
+            // Игнорируем любые сбои файловых операций, чтобы не прерывать выдачу товаров
         }
 
         return $withoutCache;
