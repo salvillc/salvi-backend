@@ -186,9 +186,13 @@ class CategoryTree
 
     public function initAllTree ($id)
     {
+        $id = (int)$id;
         $this->records = null;
-        $query = Category::find()->leftJoin(CatalogLimitation::tableName(), 'catalog_limitation.category_uuid = category.uuid AND
-                    catalog_limitation.company_id = ' . $id . ' AND catalog_limitation.specification = 0')->select([
+        $query = Category::find()->leftJoin(
+            CatalogLimitation::tableName(),
+            'catalog_limitation.category_uuid = category.uuid AND catalog_limitation.company_id = :company_id AND catalog_limitation.specification = 0',
+            [':company_id' => $id]
+        )->select([
             'category.uuid',
             'category.parent_uuid',
             'category.name',

@@ -42,7 +42,7 @@ class CategoriesController extends RestController
      */
     public function actionAllTree()
     {
-        $id = ArrayHelper::getValue($this->post, 'id');
+        $id = (int)(ArrayHelper::getValue($this->post, 'id') ?: \Yii::$app->request->get('id', 0));
         $categories = new CategoryTree(false, $id);
         return $this->successResponse([
             'category' => $categories,
