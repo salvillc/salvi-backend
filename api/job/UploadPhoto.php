@@ -82,7 +82,7 @@ class UploadPhoto extends BaseObject implements JobInterface
             return false;
         }
         try {
-            $mode = FTP_ASCII;
+            $mode = FTP_BINARY;
             $asynchronous = false;
             $name = Uuid::uuid4()->toString() . '.' . pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION);
             $path = Yii::getAlias('@api') . '/web/product/';
@@ -92,8 +92,9 @@ class UploadPhoto extends BaseObject implements JobInterface
 
             Yii::$app->ftp->get($remotePath, $fileFullPath, $mode, $asynchronous);
 
-            $found = file_exists($fileFullPath) && filesize($fileFullPath) > 0;
-            $this->logPhotoStatus($product, $remotePath, $fileFullPath, $found);
+            $fileSize = file_exists($fileFullPath) ? (int)@filesize($fileFullPath) : 0;
+            $found = file_exists($fileFullPath) && $fileSize > 0;
+            $this->logPhotoStatus($product, $remotePath, $fileFullPath, $found, null, $fileSize);
 
             if (!$found) {
                 return false;
@@ -134,9 +135,22 @@ class UploadPhoto extends BaseObject implements JobInterface
                 );
             }
 
-        } catch (\Exception $e) {
-            \Yii::error($e->getMessage());
-            $this->logPhotoStatus($product, $remotePath ?? $url, $fileFullPath ?? '', false, $e->getMessage());
+        } catch (\Throwable $e) {
+            $fileSize = (isset($fileFullPath) && file_exists($fileFullPath)) ? (int)@filesize($fileFullPath) : 0;
+            $errorMessage = sprintf(
+                'UploadPhoto error: product_id=%s uuid=%s url=%s remote=%s local=%s size=%d error=%s (%s:%d)',
+                $product->id,
+                $product->uuid,
+                $url,
+                $remotePath ?? '',
+                $fileFullPath ?? '',
+                $fileSize,
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine()
+            );
+            \Yii::error($errorMessage, 'upload_photo');
+            $this->logPhotoStatus($product, $remotePath ?? $url, $fileFullPath ?? '', false, $e->getMessage(), $fileSize);
         }
     }
 
@@ -146,20 +160,22 @@ class UploadPhoto extends BaseObject implements JobInterface
      * @param string $localPath
      * @param bool $found
      * @param string|null $error
+     * @param int|null $fileSize
      */
-    private function logPhotoStatus(Product $product, string $remotePath, string $localPath, bool $found, string $error = null)
+    private function logPhotoStatus(Product $product, string $remotePath, string $localPath, bool $found, string $error = null, int $fileSize = null)
     {
         $dir = Yii::getAlias('@api') . '/runtime/logs/products_photo/';
         FileHelper::createDirectory($dir);
         $file = $dir . $product->id . '.log';
 
         $line = sprintf(
-            "[%s] product_id=%s uuid=%s remote=%s local=%s status=%s%s\n",
+            "[%s] product_id=%s uuid=%s remote=%s local=%s size=%s status=%s%s\n",
             date('Y-m-d H:i:s'),
             $product->id,
             $product->uuid,
             $remotePath,
             $localPath,
+            $fileSize !== null ? (string)$fileSize : 'unknown',
             $found ? 'FOUND' : 'NOT_FOUND',
             $error !== null ? " error={$error}" : ''
         );

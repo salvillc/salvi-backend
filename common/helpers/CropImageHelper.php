@@ -37,11 +37,24 @@ class CropImageHelper
     public static function createThumbnail($src, $dest, $targetWidth, $targetHeight = null)
     {
         $type = exif_imagetype($src);
-        if (!$type || !self::IMAGE_HANDLERS[$type]) {
+        if (!$type || !isset(self::IMAGE_HANDLERS[$type])) {
             return null;
         }
 
-        $image = call_user_func(self::IMAGE_HANDLERS[$type]['load'], $src);
+        try {
+            $image = call_user_func(self::IMAGE_HANDLERS[$type]['load'], $src);
+        } catch (\Throwable $e) {
+            $size = file_exists($src) ? @filesize($src) : false;
+            $contextMsg = sprintf(
+                'CropImageHelper::createThumbnail failed: src=%s type=%s size=%s error=%s',
+                $src,
+                (string)$type,
+                $size === false ? 'unknown' : (string)$size,
+                $e->getMessage()
+            );
+            \Yii::warning($contextMsg, 'image');
+            throw new \RuntimeException($contextMsg, (int)$e->getCode(), $e);
+        }
 
         if (!$image) {
             return null;

@@ -137,8 +137,16 @@ class SftpController extends Controller
                 if ($size > 100) {
                     try {
                         CropImageHelper::createThumbnail($img, $img, 260);
-                    } catch (\Exception $e) {
-                        Yii::error($e);
+                    } catch (\Throwable $e) {
+                        Yii::error(sprintf(
+                            'SftpController::actionCropImages error: photo_id=%s product_id=%s file=%s error=%s (%s:%d)',
+                            $image->id,
+                            $image->product_id,
+                            $img,
+                            $e->getMessage(),
+                            $e->getFile(),
+                            $e->getLine()
+                        ), 'crop_images');
                     }
                 }
             }

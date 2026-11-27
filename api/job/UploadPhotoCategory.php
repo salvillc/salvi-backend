@@ -30,7 +30,7 @@ class UploadPhotoCategory extends BaseObject implements JobInterface {
         }
 
         try {
-            $mode = FTP_ASCII;
+            $mode = FTP_BINARY;
             $asynchronous = false;
             $name = Uuid::uuid4()->toString() . '.' . pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION);
             $path = Yii::getAlias('@api') . '/web/category/';
@@ -38,15 +38,22 @@ class UploadPhotoCategory extends BaseObject implements JobInterface {
             FileHelper::createDirectory($path);
 
             $fileFullPath = $path . $name;
+            $remotePath = '/upload/treeicons/' . $chunks[0];
 
-            Yii::$app->ftp->get('/upload/treeicons/' . $chunks[0], $fileFullPath, $mode, $asynchronous);
+            Yii::$app->ftp->get($remotePath, $fileFullPath, $mode, $asynchronous);
 
             if (!file_exists($fileFullPath) || filesize($fileFullPath) === 0) {
-                Yii::error('UploadPhotoCategory: downloaded file is missing or empty, keeping old image: ' . $fileFullPath);
+                Yii::error(sprintf(
+                    'UploadPhotoCategory: downloaded file is missing or empty, keeping old image: category_id=%s uuid=%s remote=%s local=%s',
+                    $this->category->id ?? '',
+                    $this->category->uuid ?? '',
+                    $remotePath,
+                    $fileFullPath
+                ), 'upload_photo_category');
                 return false;
             }
 
-            Yii::$app->ftp->delete('/upload/treeicons/' . $chunks[0]);
+            Yii::$app->ftp->delete($remotePath);
 
             if (strtolower(pathinfo($name, PATHINFO_EXTENSION)) === 'png') {
                 $jpgName = pathinfo($name, PATHINFO_FILENAME) . '.jpg';
@@ -81,8 +88,20 @@ class UploadPhotoCategory extends BaseObject implements JobInterface {
                 Yii::$app->cache,
                 'CategoryTreeAllCategories'
             );
-        } catch (\Exception $e) {
-            Yii::error($e->getMessage());
+        } catch (\Throwable $e) {
+            $fileSize = (isset($fileFullPath) && file_exists($fileFullPath)) ? (int)@filesize($fileFullPath) : 0;
+            Yii::error(sprintf(
+                'UploadPhotoCategory error: category_id=%s uuid=%s url=%s remote=%s local=%s size=%d error=%s (%s:%d)',
+                $this->category->id ?? '',
+                $this->category->uuid ?? '',
+                $url,
+                $remotePath ?? '',
+                $fileFullPath ?? '',
+                $fileSize,
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine()
+            ), 'upload_photo_category');
         }
     }
 }

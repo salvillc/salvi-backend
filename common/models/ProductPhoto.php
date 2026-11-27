@@ -88,7 +88,14 @@ class ProductPhoto extends \yii\db\ActiveRecord
                 CropImageHelper::createThumbnail($img, $img, $with);
                 echo $img;
                 echo "\n";
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
+                Yii::error(sprintf(
+                    'ProductPhoto::cropPhoto error: file=%s error=%s (%s:%d)',
+                    $img,
+                    $e->getMessage(),
+                    $e->getFile(),
+                    $e->getLine()
+                ), 'crop_images');
                 echo $img;
                 echo "\n";
                 echo $e->getMessage() . " from catch";
